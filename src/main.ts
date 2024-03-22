@@ -1,24 +1,25 @@
-import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
-import * as cookieParser from 'cookie-parser';
-import * as session from 'express-session';
-import * as passport from 'passport';
-import helmet from 'helmet';
+import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import {
   DocumentBuilder,
   SwaggerCustomOptions,
   SwaggerDocumentOptions,
   SwaggerModule,
 } from '@nestjs/swagger';
+import * as cookieParser from 'cookie-parser';
+import * as session from 'express-session';
+import helmet from 'helmet';
+import * as passport from 'passport';
 
-import { AppModule } from './app.module';
 import { ACCESS_TOKEN_NAME } from '@/libs/common/constants';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
   const port = process.env.API_PORT || 8080;
   const logger = new Logger('api-gateway');
 
-  const app = await NestFactory.create(AppModule);
+  const app: NestExpressApplication = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
 
   app.enableCors({
@@ -75,7 +76,7 @@ async function bootstrap() {
     customSiteTitle: 'InstaApp Restful API Documentation',
   };
 
-  SwaggerModule.setup('api', app, document, swaggerCustomOptions);
+  SwaggerModule.setup('swagger', app, document, swaggerCustomOptions);
 
   await app.listen(port, () => {
     logger.log(
