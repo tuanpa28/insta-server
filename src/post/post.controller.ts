@@ -299,8 +299,7 @@ export class PostController {
         .populate({
           path: 'user_id',
           select: 'username email full_name',
-        })
-        .exec();
+        });
 
       return {
         isError: false,

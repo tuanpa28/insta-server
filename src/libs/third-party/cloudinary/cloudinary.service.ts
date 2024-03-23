@@ -50,7 +50,6 @@ export class CloudinaryService {
 
     return {
       ...response,
-      type: response.fieldname,
       url: optimizeCloudinaryUrl(response.url),
       secure_url: optimizeCloudinaryUrl(response.secure_url),
     };
@@ -83,7 +82,6 @@ export class CloudinaryService {
     const response = await getFileById(publicId);
     return {
       ...response,
-      type: response.fieldname,
       url: optimizeCloudinaryUrl(response.url),
       secure_url: optimizeCloudinaryUrl(response.secure_url),
     };

@@ -24,7 +24,7 @@ export class UploadController {
   @Post('images')
   @ApiOperation({ summary: 'Upload Images' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
-  @UseInterceptors(FilesInterceptor('image[]', 6))
+  @UseInterceptors(FilesInterceptor('image', 6))
   async uploadImages(@UploadedFiles() files: Array<Express.Multer.File>) {
     try {
       const results = await this.uploadService.uploadArrayImage(files);
@@ -46,32 +46,6 @@ export class UploadController {
       );
     }
   }
-
-  // @Post('image')
-  // @ApiOperation({ summary: 'Upload Image' })
-  // @ApiBearerAuth(ACCESS_TOKEN_NAME)
-  // @UseInterceptors(FileInterceptor('image'))
-  // async uploadImage(@UploadedFile() file: Express.Multer.File) {
-  //   try {
-  //     const result = await this.uploadService.uploadSingleFile(file);
-
-  //     return {
-  //       isError: false,
-  //       statusCode: HttpStatus.OK,
-  //       message: 'Successful',
-  //       data: [result],
-  //     };
-  //   } catch (error) {
-  //     throw new HttpException(
-  //       {
-  //         isError: true,
-  //         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-  //         message: error.message,
-  //       },
-  //       HttpStatus.INTERNAL_SERVER_ERROR,
-  //     );
-  //   }
-  // }
 
   @Post('video')
   @ApiOperation({ summary: 'Upload Video' })

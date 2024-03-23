@@ -9,7 +9,9 @@ import {
 } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 import * as session from 'express-session';
+import { createWriteStream } from 'fs';
 import helmet from 'helmet';
+import { get } from 'http';
 import * as passport from 'passport';
 
 import { ACCESS_TOKEN_NAME } from '@/libs/common/constants';
@@ -76,12 +78,51 @@ async function bootstrap() {
     customSiteTitle: 'InstaApp Restful API Documentation',
   };
 
-  SwaggerModule.setup('swagger', app, document, swaggerCustomOptions);
+  SwaggerModule.setup('/swagger', app, document, swaggerCustomOptions);
 
   await app.listen(port, () => {
     logger.log(
       `⚡️ [http] ready on port: ${port}, url: http://localhost:${port}`,
     );
   });
+
+  if (process.env.NODE_ENV === 'develop') {
+    // write swagger ui files
+    get(
+      `http://localhost:${port}/swagger/swagger-ui-bundle.js`,
+      function (response) {
+        response.pipe(createWriteStream('swagger-static/swagger-ui-bundle.js'));
+        console.log(
+          `Swagger UI bundle file written to: '/swagger-static/swagger-ui-bundle.js'`,
+        );
+      },
+    );
+    get(
+      `http://localhost:${port}/swagger/swagger-ui-init.js`,
+      function (response) {
+        response.pipe(createWriteStream('swagger-static/swagger-ui-init.js'));
+        console.log(
+          `Swagger UI init file written to: '/swagger-static/swagger-ui-init.js'`,
+        );
+      },
+    );
+    get(
+      `http://localhost:${port}/swagger/swagger-ui-standalone-preset.js`,
+      function (response) {
+        response.pipe(
+          createWriteStream('swagger-static/swagger-ui-standalone-preset.js'),
+        );
+        console.log(
+          `Swagger UI standalone preset file written to: '/swagger-static/swagger-ui-standalone-preset.js'`,
+        );
+      },
+    );
+    get(`http://localhost:${port}/swagger/swagger-ui.css`, function (response) {
+      response.pipe(createWriteStream('swagger-static/swagger-ui.css'));
+      console.log(
+        `Swagger UI css file written to: '/swagger-static/swagger-ui.css'`,
+      );
+    });
+  }
 }
 bootstrap();

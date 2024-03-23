@@ -30,13 +30,11 @@ export class PostService {
     return this.postModel.findOne(query);
   }
 
-  findListOptions({ field, payload }: FindOptionsDto, options?: any): any {
-    const { skip, limit, sort, ...params } = options;
+  findListOptions({ field, payload }: FindOptionsDto): any {
     const query = {
       [field]: payload,
-      ...params,
     };
-    return this.postModel.find(query).sort(sort).skip(skip).limit(limit);
+    return this.postModel.find(query);
   }
 
   countDocuments() {
@@ -49,7 +47,9 @@ export class PostService {
   }
 
   update(id: string, updateEmployeeDto: UpdatePostDto): Promise<Post> {
-    return this.postModel.findByIdAndUpdate(id, updateEmployeeDto);
+    return this.postModel.findByIdAndUpdate(id, updateEmployeeDto, {
+      new: true,
+    });
   }
 
   remove(id: string): Promise<any> {

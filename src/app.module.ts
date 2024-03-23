@@ -7,11 +7,17 @@ import { PostModule } from '@/post/post.module';
 import { UploadModule } from '@/upload/upload.module';
 import { UserModule } from '@/user/user.module';
 import { Module } from '@nestjs/common';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 
 @Module({
   imports: [
     AppConfigModule,
     MongodbModule,
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'swagger-static'),
+      serveRoot: '/swagger',
+    }),
     UserModule,
     AuthModule,
     CommentModule,

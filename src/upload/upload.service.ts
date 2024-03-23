@@ -18,7 +18,7 @@ export class UploadService {
   async getfileByPublicId(publicId: string) {
     try {
       const file = await this.cloudinaryService.getFileByPublicId(publicId);
-      return new UploadedResponseDTO(file);
+      return { ...new UploadedResponseDTO(file) };
     } catch (error) {
       this.logger.error(error);
       if (error.http_code === 404) {
@@ -44,13 +44,12 @@ export class UploadService {
 
   async uploadArrayImage(images: Array<Express.Multer.File>) {
     const resolve = [];
+
     for (let i = 0; i < images.length; i++) {
       resolve.push(this.uploadSingleFile(images[i]));
     }
-    const uploadedImages = await Promise.all(resolve);
-    return {
-      data: uploadedImages,
-    };
+
+    return await Promise.all(resolve);
   }
 
   async deleteSinglefile(publicId: string) {
