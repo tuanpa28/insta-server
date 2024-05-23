@@ -15,9 +15,9 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import * as bcrypt from 'bcrypt';
 
+import { SkipAuthAdminGuard } from '@/auth/decorators';
 import { AdminGuard, AuthGuard } from '@/auth/guards';
 import { ACCESS_TOKEN_NAME } from '@/libs/common/constants';
-import { SkipAuthAdminGuard } from '@/auth/decorators';
 import { ChangePasswordDto, SearchUserDto, UserDto } from './dtos';
 import { UserService } from './user.service';
 
@@ -62,7 +62,7 @@ export class UserController {
         data: users,
         currentPage: page,
         totalPage: Math.ceil(count / limit),
-        totalDocs: users.length,
+        totalDocs: count,
       };
     } catch (error) {
       throw new HttpException(
@@ -82,6 +82,34 @@ export class UserController {
   async findOne(@Param('id') id: string) {
     try {
       const user = await this.userService.findOne(id);
+
+      return {
+        isError: false,
+        statusCode: HttpStatus.OK,
+        message: 'Successful',
+        data: user,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          isError: true,
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get(':username/username')
+  @ApiOperation({ summary: 'Get user by userName' })
+  @ApiBearerAuth(ACCESS_TOKEN_NAME)
+  async findOneByUserName(@Param('username') username: string) {
+    try {
+      const user = await this.userService.findOneOptions({
+        field: 'username',
+        payload: username,
+      });
 
       return {
         isError: false,
@@ -203,31 +231,42 @@ export class UserController {
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async getUserSuggested(@Query() query: any, @Req() req: any) {
     const { _id: user_id, followings } = req.user;
-    const { page = 1, limit = 5, ...params } = query;
+    const {
+      page = 1,
+      limit = 5,
+      _sort = 'createdAt',
+      _order = 'asc',
+      ...params
+    } = query;
 
     const options = {
       skip: (page - 1) * limit,
       limit,
+      sort: {
+        [_sort]: _order === 'desc' ? -1 : 1,
+      },
       ...params,
     };
     try {
-      const suggestedUsers = await this.userService
-        .findListOptions(
+      const query = {
+        field: '$and',
+        payload: [
           {
-            field: '$and',
-            payload: [
-              {
-                _id: { $ne: user_id, $nin: followings },
-                $or: [
-                  { followers: { $in: followings } },
-                  { followings: { $in: followings } },
-                ],
-              },
+            _id: { $ne: user_id, $nin: followings },
+          },
+          {
+            $or: [
+              { followers: { $in: followings } },
+              { followings: { $in: followings } },
             ],
           },
-          options,
-        )
-        .exec();
+        ],
+      };
+
+      const [suggestedUsers, count] = await Promise.all([
+        this.userService.findListOptions(query, options).exec(),
+        this.userService.countDocuments(query),
+      ]);
 
       return {
         isError: false,
@@ -235,8 +274,8 @@ export class UserController {
         message: 'Successful',
         data: suggestedUsers,
         currentPage: page,
-        // totalPage: Math.ceil(count / limit),
-        totalDocs: suggestedUsers.length,
+        totalPage: Math.ceil(count / limit),
+        totalDocs: count,
       };
     } catch (error) {
       throw new HttpException(
@@ -254,34 +293,50 @@ export class UserController {
   @ApiOperation({ summary: 'Search user' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async searchUser(@Query() query: SearchUserDto) {
-    const { q = '', ...params } = query;
+    const {
+      q = '',
+      page = 1,
+      limit = 10,
+      _sort = 'createdAt',
+      _order = 'asc',
+      ...params
+    } = query;
 
     const options = {
+      skip: (page - 1) * limit,
+      limit,
+      sort: {
+        [_sort]: _order === 'desc' ? -1 : 1,
+      },
       ...params,
     };
 
     try {
-      const users = await this.userService
-        .findListOptions(
-          {
-            field: '$text',
-            payload: {
-              $search: q,
-              $caseSensitive: false,
-              $diacriticSensitive: false,
-            },
-          },
-          options,
-        )
-        .select('username email full_name profile_image tick')
-        .exec();
+      const query = {
+        field: '$text',
+        payload: {
+          $search: q,
+          $caseSensitive: false,
+          $diacriticSensitive: false,
+        },
+      };
+
+      const [users, count] = await Promise.all([
+        this.userService
+          .findListOptions(query, options)
+          .select('username email full_name profile_image tick')
+          .exec(),
+        this.userService.countDocuments(query),
+      ]);
 
       return {
         isError: false,
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: users,
-        totalDocs: users.length,
+        currentPage: page,
+        totalPage: Math.ceil(count / limit),
+        totalDocs: count,
       };
     } catch (error) {
       throw new HttpException(
@@ -357,10 +412,16 @@ export class UserController {
   @ApiOperation({ summary: 'Change account password' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async changePassword(@Body() body: ChangePasswordDto, @Req() req: any) {
-    const { _id: user_id, password: currentPassword } = req.user;
+    const { _id: user_id } = req.user;
     const { password, new_password } = body;
     try {
-      const isMatch = await bcrypt.compare(password, currentPassword);
+      const user = await this.userService.findOne(user_id);
+
+      if (!user) {
+        throw new UnauthorizedException('Không tìm thấy tài khoản!');
+      }
+
+      const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
         throw new UnauthorizedException('Mật khẩu cũ không hợp lệ!');
       }

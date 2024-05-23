@@ -1,6 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
-import { ReplyCommentDto } from '../dtos';
 
 export type CommentDocument = Comment & mongoose.Document;
 
@@ -18,8 +17,25 @@ export class Comment {
   @Prop({ default: [] })
   likes: mongoose.Schema.Types.ObjectId[];
 
-  @Prop({ default: [] })
-  replies: ReplyCommentDto[];
+  @Prop({
+    type: [
+      {
+        id: { type: String, required: true },
+        user_id: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        content: { type: String, required: true },
+      },
+    ],
+    default: [],
+  })
+  replies: Array<{
+    id: string;
+    user_id: mongoose.Schema.Types.ObjectId;
+    content: string;
+  }>;
 }
 
 export const CommentSchema = SchemaFactory.createForClass(Comment);

@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { v4 as uuidv4 } from 'uuid';
 
 import { SkipAuthAdminGuard } from '@/auth/decorators';
 import { AdminGuard, AuthGuard } from '@/auth/guards';
@@ -61,7 +62,7 @@ export class CommentController {
         data: comments,
         currentPage: page,
         totalPage: Math.ceil(count / limit),
-        totalDocs: comments.length,
+        totalDocs: count,
       };
     } catch (error) {
       throw new HttpException(
@@ -103,9 +104,11 @@ export class CommentController {
   @Post()
   @ApiOperation({ summary: 'Create new comment' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
-  async create(@Body() createEmployeeDto: CreateCommentDto) {
+  async create(@Body() createEmployeeDto: CreateCommentDto, @Req() req: any) {
+    const { _id: user_id } = req.user;
+    const data = { ...createEmployeeDto, user_id };
     try {
-      const comment = await this.commentService.create(createEmployeeDto);
+      const comment = await this.commentService.create(data);
 
       return {
         isError: false,
@@ -180,18 +183,43 @@ export class CommentController {
   @Get(':id/post')
   @ApiOperation({ summary: 'Get All Comment For One Post' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
-  async findAllCommentForOnePost(@Param('id') id: string) {
+  async findAllCommentForOnePost(@Param('id') id: string, @Query() query: any) {
     try {
-      const comments = await this.commentService.findListOptions({
+      const {
+        page = 1,
+        limit = 10,
+        _sort = 'createdAt',
+        _order = 'asc',
+        ...params
+      } = query;
+
+      const options = {
+        skip: (page - 1) * limit,
+        limit,
+        sort: {
+          [_sort]: _order === 'desc' ? -1 : 1,
+        },
+        ...params,
+      };
+
+      const dataQuery = {
         field: 'post_id',
         payload: id,
-      });
+      };
+
+      const [comments, count] = await Promise.all([
+        this.commentService.findListOptions(dataQuery, options),
+        this.commentService.countDocuments(dataQuery),
+      ]);
 
       return {
         isError: false,
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: comments,
+        currentPage: page,
+        totalPage: Math.ceil(count / limit),
+        totalDocs: count,
       };
     } catch (error) {
       throw new HttpException(
@@ -213,21 +241,37 @@ export class CommentController {
       const { _id: user_id } = req.user;
       const comment = await this.commentService.findOne(id);
 
-      if (!comment.likes.includes(user_id)) {
-        await comment.updateOne({ $push: { likes: user_id } });
+      if (!comment)
         return {
-          isError: false,
-          statusCode: HttpStatus.OK,
-          message: 'You have been like comment!',
+          isError: true,
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'Comment not found!',
         };
-      } else {
-        await comment.updateOne({ $pull: { likes: user_id } });
+
+      const updateData = comment.likes.includes(user_id)
+        ? { $pull: { likes: user_id } }
+        : { $push: { likes: user_id } };
+
+      const updatedComment = await this.commentService.updateOne(
+        comment._id,
+        updateData,
+      );
+
+      if (!updatedComment) {
         return {
-          isError: false,
-          statusCode: HttpStatus.OK,
-          message: 'The comment has been unliked!',
+          isError: true,
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Failed to update comment!',
         };
       }
+
+      return {
+        isError: false,
+        statusCode: HttpStatus.OK,
+        message: comment.likes.includes(user_id)
+          ? 'The comment has been unliked!'
+          : 'You have liked the comment!',
+      };
     } catch (error) {
       throw new HttpException(
         {
@@ -249,18 +293,33 @@ export class CommentController {
     @Req() req: any,
   ) {
     try {
-      const { reply_id, content } = body;
+      const { content } = body;
       const { _id: user_id } = req.user;
 
       const reply: ReplyCommentDto = {
-        _id: reply_id,
+        id: uuidv4(),
         user_id,
         content,
       };
 
       const comment = await this.commentService.findOne(id);
+      if (!comment)
+        return {
+          isError: true,
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'Comment not found!',
+        };
 
-      await comment.updateOne({ $push: { replies: reply } });
+      const updatedComment = await this.commentService.updateOne(comment._id, {
+        $push: { replies: reply },
+      });
+      if (!updatedComment) {
+        return {
+          isError: true,
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Failed to update comment!',
+        };
+      }
 
       return {
         isError: false,
@@ -289,17 +348,34 @@ export class CommentController {
   ) {
     try {
       const { reply_id, idAdminPost } = body;
-      const { _id: user_id } = req.user;
+      const { _id: user_id, isAdmin } = req.user;
 
       const comment = await this.commentService.findOne(id);
+      if (!comment)
+        return {
+          isError: true,
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'Comment not found!',
+        };
 
-      if (
+      const isDeleteReply =
         user_id === idAdminPost ||
-        comment.replies.some((item: any) => item.user_id === user_id)
-      ) {
-        await comment.updateOne({
+        isAdmin ||
+        comment.replies.some((item: any) => item.user_id === user_id);
+
+      if (isDeleteReply) {
+        const updatedReply = await this.commentService.updateOne(comment._id, {
           $pull: { replies: { _id: reply_id } },
         });
+
+        if (!updatedReply) {
+          return {
+            isError: true,
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            message: 'Failed to delete reply!',
+          };
+        }
+
         return {
           isError: false,
           statusCode: HttpStatus.OK,
@@ -327,12 +403,24 @@ export class CommentController {
   @Get('reply/:id/results')
   @ApiOperation({ summary: 'Get All Reply For One Comment' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
-  async findAllReplyForOneComment() {
+  async findAllReplyForOneComment(@Param('id') id: string) {
     try {
+      const comment = await this.commentService.findOne(id).populate({
+        path: 'replies.user_id',
+        select: 'username email full_name profile_image bio current_city tick',
+      });
+      if (!comment)
+        return {
+          isError: true,
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'Comment not found!',
+        };
+
       return {
         isError: false,
         statusCode: HttpStatus.OK,
         message: 'Successful',
+        data: comment.replies,
       };
     } catch (error) {
       throw new HttpException(

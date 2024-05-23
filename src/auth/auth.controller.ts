@@ -174,7 +174,10 @@ export class AuthController {
         </script>
       `);
 
-      return res.redirect(process.env.URL_CLIENT);
+      const redirectUrl = new URL(process.env.URL_CLIENT);
+      redirectUrl.searchParams.append('accessToken', accessToken);
+
+      return res.redirect(redirectUrl.toString());
     } catch (error) {
       throw new HttpException(
         {

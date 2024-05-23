@@ -9,6 +9,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -60,7 +61,7 @@ export class NotifiController {
         data: notifications,
         currentPage: page,
         totalPage: Math.ceil(count / limit),
-        totalDocs: notifications.length,
+        totalDocs: count,
       };
     } catch (error) {
       throw new HttpException(
@@ -102,9 +103,14 @@ export class NotifiController {
   @Post()
   @ApiOperation({ summary: 'Create new notification' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
-  async create(@Body() createEmployeeDto: CreateNotificationDto) {
+  async create(
+    @Body() createEmployeeDto: CreateNotificationDto,
+    @Req() req: any,
+  ) {
     try {
-      const notification = await this.notifiService.create(createEmployeeDto);
+      const { _id: user_id } = req.user;
+      const data = { ...createEmployeeDto, user_id };
+      const notification = await this.notifiService.create(data);
 
       return {
         isError: false,

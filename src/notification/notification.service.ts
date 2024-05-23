@@ -39,8 +39,11 @@ export class NotifiService {
     return this.NotifiModel.findOne(query);
   }
 
-  countDocuments() {
-    return this.NotifiModel.countDocuments();
+  countDocuments(options?: FindOptionsDto) {
+    const query = {
+      ...(options && { [options.field]: options.payload }),
+    };
+    return this.NotifiModel.countDocuments(query).exec();
   }
 
   async create(createNotifiDto: CreateNotificationDto): Promise<Notification> {
@@ -52,7 +55,9 @@ export class NotifiService {
     id: string,
     updateEmployeeDto: UpdateNotificationDto,
   ): Promise<Notification> {
-    return this.NotifiModel.findByIdAndUpdate(id, updateEmployeeDto);
+    return this.NotifiModel.findByIdAndUpdate(id, updateEmployeeDto, {
+      new: true,
+    });
   }
 
   remove(id: string) {

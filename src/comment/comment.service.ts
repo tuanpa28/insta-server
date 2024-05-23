@@ -46,8 +46,11 @@ export class CommentService {
       .exec();
   }
 
-  countDocuments() {
-    return this.commentModel.countDocuments();
+  countDocuments(options?: FindOptionsDto) {
+    const query = {
+      ...(options && { [options.field]: options.payload }),
+    };
+    return this.commentModel.countDocuments(query).exec();
   }
 
   async create(createCommentDto: CreateCommentDto): Promise<Comment> {
@@ -56,7 +59,19 @@ export class CommentService {
   }
 
   update(id: string, updateEmployeeDto: UpdateCommentDto): Promise<Comment> {
-    return this.commentModel.findByIdAndUpdate(id, updateEmployeeDto);
+    return this.commentModel
+      .findByIdAndUpdate(id, updateEmployeeDto, {
+        new: true,
+      })
+      .exec();
+  }
+
+  updateOne(id: string, update: any): Promise<Comment> {
+    return this.commentModel
+      .findByIdAndUpdate(id, update, {
+        new: true,
+      })
+      .exec();
   }
 
   remove(id: string) {

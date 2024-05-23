@@ -37,8 +37,11 @@ export class PostService {
     return this.postModel.find(query);
   }
 
-  countDocuments() {
-    return this.postModel.countDocuments();
+  countDocuments(options?: FindOptionsDto) {
+    const query = {
+      ...(options && { [options.field]: options.payload }),
+    };
+    return this.postModel.countDocuments(query).exec();
   }
 
   async create(createPostDto: CreatePostDto): Promise<Post> {

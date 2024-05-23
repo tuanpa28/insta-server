@@ -39,8 +39,11 @@ export class UserService {
     return this.userModel.find(query).sort(sort).skip(skip).limit(limit);
   }
 
-  countDocuments() {
-    return this.userModel.countDocuments();
+  countDocuments(options?: FindOptionsDto) {
+    const query = {
+      ...(options && { [options.field]: options.payload }),
+    };
+    return this.userModel.countDocuments(query).exec();
   }
 
   create(createUserDto: CreateUserDto): Promise<User> {
@@ -49,7 +52,9 @@ export class UserService {
   }
 
   update(id: string, updateEmployeeDto: UpdateUserDto): Promise<User> {
-    return this.userModel.findByIdAndUpdate(id, updateEmployeeDto);
+    return this.userModel.findByIdAndUpdate(id, updateEmployeeDto, {
+      new: true,
+    });
   }
 
   remove(id: string) {

@@ -1,5 +1,6 @@
+import { TypeNotification } from '@/libs/common/enums';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsString, IsEnum } from 'class-validator';
 
 class CreateNotificationDto {
   @ApiProperty()
@@ -10,6 +11,7 @@ class CreateNotificationDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
+  @IsEnum(TypeNotification)
   type: string;
 
   @ApiProperty()

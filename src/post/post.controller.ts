@@ -17,7 +17,6 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipAuthAdminGuard } from '@/auth/decorators';
 import { AdminGuard, AuthGuard } from '@/auth/guards';
 import { ACCESS_TOKEN_NAME } from '@/libs/common/constants';
-import { UserService } from '@/user/user.service';
 import { CreatePostDto, UpdatePostDto } from './dtos';
 import { PostService } from './post.service';
 
@@ -25,10 +24,7 @@ import { PostService } from './post.service';
 @ApiTags('Post')
 @UseGuards(AuthGuard, AdminGuard)
 export class PostController {
-  constructor(
-    private postService: PostService,
-    private userService: UserService,
-  ) {}
+  constructor(private postService: PostService) {}
 
   @Get()
   @ApiOperation({ summary: 'Get post list' })
@@ -65,7 +61,7 @@ export class PostController {
         data: posts,
         currentPage: page,
         totalPage: Math.ceil(count / limit),
-        totalDocs: posts.length,
+        totalDocs: count,
       };
     } catch (error) {
       throw new HttpException(
@@ -85,6 +81,40 @@ export class PostController {
   async findOne(@Param('id') id: string) {
     try {
       const post = await this.postService.findOne(id);
+
+      return {
+        isError: false,
+        statusCode: HttpStatus.OK,
+        message: 'Successful',
+        data: post,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          isError: true,
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get(':slug/slug')
+  @ApiOperation({ summary: 'Get post by slug' })
+  @ApiBearerAuth(ACCESS_TOKEN_NAME)
+  async findOneBySlug(@Param('slug') slug: string) {
+    try {
+      const post = await this.postService.findOneOptions({
+        field: 'slug',
+        payload: slug,
+      });
+      if (!post)
+        return {
+          isError: true,
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'Post not found!',
+        };
 
       return {
         isError: false,
@@ -248,31 +278,50 @@ export class PostController {
   @Get('timeline/results')
   @ApiOperation({ summary: 'Get post list on time line' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
-  async postsOnTimeline(@Req() req: any) {
+  async postsOnTimeline(@Query() query: any, @Req() req: any) {
     try {
       const { _id: user_id, followings } = req.user;
+      const {
+        page = 1,
+        limit = 10,
+        _sort = 'createdAt',
+        _order = 'asc',
+      } = query;
 
-      const data = [user_id, ...followings];
+      const { skip, sort } = {
+        skip: (page - 1) * limit,
+        sort: {
+          [_sort]: _order === 'desc' ? -1 : 1,
+        },
+      };
 
-      const friendPosts = await this.postService
-        .findListOptions({
-          field: 'user_id',
-          payload: { $in: data },
-        })
-        .populate({
-          path: 'user_id',
-          select:
-            'username profile_image full_name followers followings createdAt',
-        });
+      const queryData = {
+        field: 'user_id',
+        payload: { $in: [user_id, ...followings] },
+      };
 
-      friendPosts.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const [friendPosts, count] = await Promise.all([
+        this.postService
+          .findListOptions(queryData)
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate({
+            path: 'user_id',
+            select:
+              'username profile_image full_name followers followings createdAt',
+          }),
+        this.postService.countDocuments(queryData),
+      ]);
 
       return {
         isError: false,
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: friendPosts,
-        totalDocs: friendPosts.length,
+        currentPage: page,
+        totalPage: Math.ceil(count / limit),
+        totalDocs: count,
       };
     } catch (error) {
       throw new HttpException(
