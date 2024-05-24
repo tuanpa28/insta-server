@@ -1,0 +1,6 @@
+# Ignore IDE directories
+.vscode/
+
+# Ignore build directories
+node_modules/
+dist/

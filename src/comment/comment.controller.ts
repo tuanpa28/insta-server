@@ -253,7 +253,7 @@ export class CommentController {
         : { $push: { likes: user_id } };
 
       const updatedComment = await this.commentService.updateOne(
-        comment._id,
+        comment._id as string,
         updateData,
       );
 
@@ -310,9 +310,12 @@ export class CommentController {
           message: 'Comment not found!',
         };
 
-      const updatedComment = await this.commentService.updateOne(comment._id, {
-        $push: { replies: reply },
-      });
+      const updatedComment = await this.commentService.updateOne(
+        comment._id as string,
+        {
+          $push: { replies: reply },
+        },
+      );
       if (!updatedComment) {
         return {
           isError: true,
@@ -364,9 +367,12 @@ export class CommentController {
         comment.replies.some((item: any) => item.user_id === user_id);
 
       if (isDeleteReply) {
-        const updatedReply = await this.commentService.updateOne(comment._id, {
-          $pull: { replies: { _id: reply_id } },
-        });
+        const updatedReply = await this.commentService.updateOne(
+          comment._id as string,
+          {
+            $pull: { replies: { _id: reply_id } },
+          },
+        );
 
         if (!updatedReply) {
           return {
