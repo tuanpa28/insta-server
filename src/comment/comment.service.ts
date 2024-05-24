@@ -46,10 +46,11 @@ export class CommentService {
       .exec();
   }
 
-  countDocuments(options?: FindOptionsDto) {
-    const query = {
-      ...(options && { [options.field]: options.payload }),
-    };
+  findAggregate(query: Array<any>) {
+    return this.commentModel.aggregate(query);
+  }
+
+  countDocuments(query = {}) {
     return this.commentModel.countDocuments(query).exec();
   }
 

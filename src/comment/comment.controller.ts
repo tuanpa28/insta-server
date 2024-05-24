@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { v4 as uuidv4 } from 'uuid';
+import { ObjectId } from 'mongodb';
 
 import { SkipAuthAdminGuard } from '@/auth/decorators';
 import { AdminGuard, AuthGuard } from '@/auth/guards';
@@ -42,8 +42,8 @@ export class CommentController {
       } = query;
 
       const options = {
-        skip: (page - 1) * limit,
-        limit,
+        skip: (Number(page) - 1) * Number(limit),
+        limit: Number(limit),
         sort: {
           [_sort]: _order === 'desc' ? -1 : 1,
         },
@@ -60,8 +60,8 @@ export class CommentController {
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: comments,
-        currentPage: page,
-        totalPage: Math.ceil(count / limit),
+        currentPage: Number(page),
+        totalPage: Math.ceil(count / Number(limit)),
         totalDocs: count,
       };
     } catch (error) {
@@ -184,6 +184,7 @@ export class CommentController {
   @ApiOperation({ summary: 'Get All Comment For One Post' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async findAllCommentForOnePost(@Param('id') id: string, @Query() query: any) {
+    const postId = new ObjectId(id as string);
     try {
       const {
         page = 1,
@@ -193,23 +194,47 @@ export class CommentController {
         ...params
       } = query;
 
-      const options = {
-        skip: (page - 1) * limit,
-        limit,
-        sort: {
-          [_sort]: _order === 'desc' ? -1 : 1,
-        },
-        ...params,
-      };
+      const skip = (Number(page) - 1) * Number(limit);
+      const sort = { [_sort]: _order === 'desc' ? -1 : 1 };
 
-      const dataQuery = {
-        field: 'post_id',
-        payload: id,
-      };
+      const matchCondition = { post_id: postId, ...params };
+
+      const pipeline = [
+        { $match: matchCondition },
+        { $sort: sort },
+        { $skip: skip },
+        { $limit: Number(limit) },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user_id',
+            foreignField: '_id',
+            as: 'user',
+          },
+        },
+        { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            _id: 1,
+            content: 1,
+            likes: 1,
+            replies: 1,
+            createdAt: 1,
+            'user._id': 1,
+            'user.username': 1,
+            'user.email': 1,
+            'user.full_name': 1,
+            'user.profile_image': 1,
+            'user.bio': 1,
+            'user.current_city': 1,
+            'user.tick': 1,
+          },
+        },
+      ];
 
       const [comments, count] = await Promise.all([
-        this.commentService.findListOptions(dataQuery, options),
-        this.commentService.countDocuments(dataQuery),
+        this.commentService.findAggregate(pipeline),
+        this.commentService.countDocuments(matchCondition),
       ]);
 
       return {
@@ -217,8 +242,8 @@ export class CommentController {
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: comments,
-        currentPage: page,
-        totalPage: Math.ceil(count / limit),
+        currentPage: Number(page),
+        totalPage: Math.ceil(count / Number(limit)),
         totalDocs: count,
       };
     } catch (error) {
@@ -297,7 +322,6 @@ export class CommentController {
       const { _id: user_id } = req.user;
 
       const reply: ReplyCommentDto = {
-        id: uuidv4(),
         user_id,
         content,
       };
@@ -405,22 +429,58 @@ export class CommentController {
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async findAllReplyForOneComment(@Param('id') id: string) {
     try {
-      const comment = await this.commentService.findOne(id).populate({
-        path: 'replies.user_id',
-        select: 'username email full_name profile_image bio current_city tick',
-      });
-      if (!comment)
+      const commentId = new ObjectId(id as string);
+
+      const replies = await this.commentService.findAggregate([
+        { $match: { _id: commentId } },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'replies.user_id',
+            foreignField: '_id',
+            as: 'user',
+          },
+        },
+        {
+          $unwind: {
+            path: '$user',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $unwind: {
+            path: '$replies',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            _id: '$replies._id',
+            content: '$replies.content',
+            'user._id': 1,
+            'user.username': 1,
+            'user.email': 1,
+            'user.full_name': 1,
+            'user.profile_image': 1,
+            'user.bio': 1,
+            'user.current_city': 1,
+            'user.tick': 1,
+          },
+        },
+      ]);
+
+      if (!replies)
         return {
           isError: true,
           statusCode: HttpStatus.NOT_FOUND,
-          message: 'Comment not found!',
+          message: 'Replies not found!',
         };
 
       return {
         isError: false,
         statusCode: HttpStatus.OK,
         message: 'Successful',
-        data: comment.replies,
+        data: replies,
       };
     } catch (error) {
       throw new HttpException(

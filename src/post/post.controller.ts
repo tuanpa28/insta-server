@@ -13,6 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ObjectId } from 'mongodb';
 
 import { SkipAuthAdminGuard } from '@/auth/decorators';
 import { AdminGuard, AuthGuard } from '@/auth/guards';
@@ -41,8 +42,8 @@ export class PostController {
       } = query;
 
       const options = {
-        skip: (page - 1) * limit,
-        limit,
+        skip: (Number(page) - 1) * Number(limit),
+        limit: Number(limit),
         sort: {
           [_sort]: _order === 'desc' ? -1 : 1,
         },
@@ -59,8 +60,8 @@ export class PostController {
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: posts,
-        currentPage: page,
-        totalPage: Math.ceil(count / limit),
+        currentPage: Number(page),
+        totalPage: Math.ceil(count / Number(limit)),
         totalDocs: count,
       };
     } catch (error) {
@@ -137,9 +138,11 @@ export class PostController {
   @Post()
   @ApiOperation({ summary: 'Create new post' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
-  async create(@Body() createEmployeeDto: CreatePostDto) {
+  async create(@Body() createEmployeeDto: CreatePostDto, @Req() req: any) {
+    const { _id: user_id } = req.user;
+    const data = { ...createEmployeeDto, user_id };
     try {
-      const post = await this.postService.create(createEmployeeDto);
+      const post = await this.postService.create(data);
 
       return {
         isError: false,
@@ -220,21 +223,21 @@ export class PostController {
 
       const post = await this.postService.findOne(id);
 
-      if (!post.likes.includes(user_id)) {
-        await post.updateOne({ $push: { likes: user_id } });
-        return {
-          isError: false,
-          statusCode: HttpStatus.OK,
-          message: 'You have been like post!',
-        };
-      } else {
-        await post.updateOne({ $pull: { likes: user_id } });
-        return {
-          isError: false,
-          statusCode: HttpStatus.OK,
-          message: 'The post has been unliked!',
-        };
-      }
+      const updateAction = post.likes.includes(user_id)
+        ? { $pull: { likes: user_id } }
+        : { $push: { likes: user_id } };
+
+      await post.updateOne(updateAction);
+
+      const message = post.likes.includes(user_id)
+        ? 'The post has been unliked!'
+        : 'You have liked the post!';
+
+      return {
+        isError: false,
+        statusCode: HttpStatus.OK,
+        message,
+      };
     } catch (error) {
       throw new HttpException(
         {
@@ -255,8 +258,16 @@ export class PostController {
       const { _id: user_id } = req.user;
 
       const post = await this.postService.findOne(id);
+      if (!post)
+        return {
+          isError: true,
+          statusCode: HttpStatus.NOT_FOUND,
+          message: 'Post not found!',
+        };
 
-      await post.updateOne({ $push: { shares: user_id } });
+      await post.updateOne({
+        $push: { shares: { user_id, date: new Date() } },
+      });
 
       return {
         isError: false,
@@ -281,37 +292,69 @@ export class PostController {
   async postsOnTimeline(@Query() query: any, @Req() req: any) {
     try {
       const { _id: user_id, followings } = req.user;
+      const userId = new ObjectId(user_id as string);
+      const followingsObjectId = followings.map(
+        (following: string) => new ObjectId(following),
+      );
       const {
         page = 1,
         limit = 10,
         _sort = 'createdAt',
         _order = 'asc',
+        ...params
       } = query;
 
       const { skip, sort } = {
-        skip: (page - 1) * limit,
+        skip: (Number(page) - 1) * Number(limit),
         sort: {
           [_sort]: _order === 'desc' ? -1 : 1,
         },
       };
 
-      const queryData = {
-        field: 'user_id',
-        payload: { $in: [user_id, ...followings] },
+      const matchCondition = {
+        $or: [{ user_id: userId }, { user_id: { $in: followingsObjectId } }],
+        ...params,
       };
 
+      const pipeline = [
+        {
+          $match: matchCondition,
+        },
+        { $sort: sort },
+        { $skip: skip },
+        { $limit: Number(limit) },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user_id',
+            foreignField: '_id',
+            as: 'user',
+          },
+        },
+        {
+          $unwind: { path: '$user', preserveNullAndEmptyArrays: true },
+        },
+        {
+          $project: {
+            caption: 1,
+            media: 1,
+            likes: 1,
+            shares: 1,
+            slug: 1,
+            createdAt: 1,
+            'user.username': 1,
+            'user.profile_image': 1,
+            'user.full_name': 1,
+            'user.followers': 1,
+            'user.followings': 1,
+            'user.createdAt': 1,
+          },
+        },
+      ];
+
       const [friendPosts, count] = await Promise.all([
-        this.postService
-          .findListOptions(queryData)
-          .sort(sort)
-          .skip(skip)
-          .limit(limit)
-          .populate({
-            path: 'user_id',
-            select:
-              'username profile_image full_name followers followings createdAt',
-          }),
-        this.postService.countDocuments(queryData),
+        this.postService.findAggregate(pipeline),
+        this.postService.countDocuments(matchCondition),
       ]);
 
       return {
@@ -319,8 +362,8 @@ export class PostController {
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: friendPosts,
-        currentPage: page,
-        totalPage: Math.ceil(count / limit),
+        currentPage: Number(page),
+        totalPage: Math.ceil(count / Number(limit)),
         totalDocs: count,
       };
     } catch (error) {
@@ -339,16 +382,37 @@ export class PostController {
   @ApiOperation({ summary: 'Get All Post For One User' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async findAllPostForOneUser(@Param('id') user_id: string) {
+    const userId = new ObjectId(user_id);
     try {
-      const posts = await this.postService
-        .findListOptions({
-          field: 'user_id',
-          payload: user_id,
-        })
-        .populate({
-          path: 'user_id',
-          select: 'username email full_name',
-        });
+      const posts = await this.postService.findAggregate([
+        {
+          $match: { user_id: userId },
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user_id',
+            foreignField: '_id',
+            as: 'user',
+          },
+        },
+        {
+          $unwind: { path: '$user', preserveNullAndEmptyArrays: true },
+        },
+        {
+          $project: {
+            caption: 1,
+            media: 1,
+            likes: 1,
+            shares: 1,
+            slug: 1,
+            'user._id': 1,
+            'user.username': 1,
+            'user.email': 1,
+            'user.full_name': 1,
+          },
+        },
+      ]);
 
       return {
         isError: false,
@@ -373,27 +437,27 @@ export class PostController {
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async findAllMediaPostsUser(@Req() req: any) {
     try {
-      const { _id: user_id } = req.user;
+      const { _id } = req.user;
 
-      const posts = await this.postService.findListOptions({
-        field: 'user_id',
-        payload: user_id,
-      });
+      const user_id = new ObjectId(_id as string);
 
-      const newMedia = [];
-      posts.map((post) => {
-        const data = post?.media.map(({ type, url }) => {
-          return { post_id: post._id, type, url };
-        });
-
-        newMedia.push(...data);
-      });
+      const medias = await this.postService.findAggregate([
+        { $match: { user_id } },
+        { $unwind: '$media' },
+        {
+          $project: {
+            post_id: '$_id',
+            type: '$media.type',
+            url: '$media.url',
+          },
+        },
+      ]);
 
       return {
         isError: false,
         statusCode: HttpStatus.OK,
         message: 'Successful',
-        data: newMedia,
+        data: medias,
       };
     } catch (error) {
       throw new HttpException(

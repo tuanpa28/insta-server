@@ -41,8 +41,8 @@ export class NotifiController {
       } = query;
 
       const options = {
-        skip: (page - 1) * limit,
-        limit,
+        skip: (Number(page) - 1) * Number(limit),
+        limit: Number(limit),
         sort: {
           [_sort]: _order === 'desc' ? -1 : 1,
         },
@@ -59,8 +59,8 @@ export class NotifiController {
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: notifications,
-        currentPage: page,
-        totalPage: Math.ceil(count / limit),
+        currentPage: Number(page),
+        totalPage: Math.ceil(count / Number(limit)),
         totalDocs: count,
       };
     } catch (error) {

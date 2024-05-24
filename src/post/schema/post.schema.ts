@@ -17,11 +17,29 @@ export class Post {
   @Prop({ type: [MediaDto], required: true })
   media: MediaDto[];
 
-  @Prop({ default: [] })
+  @Prop({
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    default: [],
+  })
   likes: mongoose.Schema.Types.ObjectId[];
 
-  @Prop({ default: [] })
-  shares: mongoose.Schema.Types.ObjectId[];
+  @Prop({
+    type: [
+      {
+        user_id: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        date: { type: Date, default: Date.now },
+      },
+    ],
+    default: [],
+  })
+  shares: Array<{
+    user_id: mongoose.Schema.Types.ObjectId;
+    date: Date;
+  }>;
 
   @Prop({ unique: true })
   slug: string;

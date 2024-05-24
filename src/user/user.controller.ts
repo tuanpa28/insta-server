@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import * as bcrypt from 'bcrypt';
+import { ObjectId } from 'mongodb';
 
 import { SkipAuthAdminGuard } from '@/auth/decorators';
 import { AdminGuard, AuthGuard } from '@/auth/guards';
@@ -42,8 +43,8 @@ export class UserController {
       } = query;
 
       const options = {
-        skip: (page - 1) * limit,
-        limit,
+        skip: (Number(page) - 1) * Number(limit),
+        limit: Number(limit),
         sort: {
           [_sort]: _order === 'desc' ? -1 : 1,
         },
@@ -60,8 +61,8 @@ export class UserController {
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: users,
-        currentPage: page,
-        totalPage: Math.ceil(count / limit),
+        currentPage: Number(page),
+        totalPage: Math.ceil(count / Number(limit)),
         totalDocs: count,
       };
     } catch (error) {
@@ -231,6 +232,11 @@ export class UserController {
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async getUserSuggested(@Query() query: any, @Req() req: any) {
     const { _id: user_id, followings } = req.user;
+    const userId = new ObjectId(user_id as string);
+    const followingsObjectId = followings.map(
+      (following: string) => new ObjectId(following),
+    );
+
     const {
       page = 1,
       limit = 5,
@@ -239,33 +245,58 @@ export class UserController {
       ...params
     } = query;
 
-    const options = {
-      skip: (page - 1) * limit,
-      limit,
-      sort: {
-        [_sort]: _order === 'desc' ? -1 : 1,
-      },
-      ...params,
+    const skip = (Number(page) - 1) * Number(limit);
+    const sort = {
+      [_sort]: _order === 'desc' ? -1 : 1,
     };
     try {
-      const query = {
-        field: '$and',
-        payload: [
+      const matchCondition = {
+        $and: [
           {
-            _id: { $ne: user_id, $nin: followings },
+            _id: { $ne: userId, $nin: followingsObjectId },
           },
           {
             $or: [
-              { followers: { $in: followings } },
-              { followings: { $in: followings } },
+              { followers: { $in: followingsObjectId } },
+              { followings: { $in: followingsObjectId } },
             ],
           },
         ],
+        ...params,
       };
 
-      const [suggestedUsers, count] = await Promise.all([
-        this.userService.findListOptions(query, options).exec(),
-        this.userService.countDocuments(query),
+      const pipeline = [
+        {
+          $match: matchCondition,
+        },
+        {
+          $sort: sort,
+        },
+        {
+          $skip: skip,
+        },
+        {
+          $limit: Number(limit),
+        },
+        {
+          $project: {
+            _id: 1,
+            username: 1,
+            email: 1,
+            full_name: 1,
+            profile_image: 1,
+            bio: 1,
+            current_city: 1,
+            tick: 1,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      ];
+
+      const [suggestedUsers, countResult] = await Promise.all([
+        this.userService.findAggregate(pipeline),
+        this.userService.countDocuments(matchCondition),
       ]);
 
       return {
@@ -273,9 +304,9 @@ export class UserController {
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: suggestedUsers,
-        currentPage: page,
-        totalPage: Math.ceil(count / limit),
-        totalDocs: count,
+        currentPage: Number(page),
+        totalPage: Math.ceil(countResult / Number(limit)),
+        totalDocs: countResult,
       };
     } catch (error) {
       throw new HttpException(
@@ -296,37 +327,55 @@ export class UserController {
     const {
       q = '',
       page = 1,
-      limit = 10,
+      limit = 12,
       _sort = 'createdAt',
       _order = 'asc',
       ...params
     } = query;
 
-    const options = {
-      skip: (page - 1) * limit,
-      limit,
-      sort: {
-        [_sort]: _order === 'desc' ? -1 : 1,
-      },
-      ...params,
+    const skip = (Number(page) - 1) * Number(limit);
+    const sort = {
+      [_sort]: _order === 'desc' ? -1 : 1,
     };
 
     try {
-      const query = {
-        field: '$text',
-        payload: {
+      const matchCondition = {
+        $text: {
           $search: q,
           $caseSensitive: false,
           $diacriticSensitive: false,
         },
+        ...params,
       };
 
+      const pipeline = [
+        {
+          $match: matchCondition,
+        },
+        {
+          $sort: sort,
+        },
+        {
+          $skip: skip,
+        },
+        {
+          $limit: Number(limit),
+        },
+        {
+          $project: {
+            _id: 1,
+            username: 1,
+            email: 1,
+            full_name: 1,
+            profile_image: 1,
+            tick: 1,
+          },
+        },
+      ];
+
       const [users, count] = await Promise.all([
-        this.userService
-          .findListOptions(query, options)
-          .select('username email full_name profile_image tick')
-          .exec(),
-        this.userService.countDocuments(query),
+        this.userService.findAggregate(pipeline),
+        this.userService.countDocuments(matchCondition),
       ]);
 
       return {
@@ -334,8 +383,8 @@ export class UserController {
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: users,
-        currentPage: page,
-        totalPage: Math.ceil(count / limit),
+        currentPage: Number(page),
+        totalPage: Math.ceil(count / Number(limit)),
         totalDocs: count,
       };
     } catch (error) {
@@ -354,12 +403,42 @@ export class UserController {
   @ApiOperation({ summary: 'Get user followers' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async getFollowers(@Req() req: any) {
-    const { _id: user_id } = req.user;
+    const { _id } = req.user;
+    const userId = new ObjectId(_id as string);
     try {
-      const user = await this.userService.findOne(user_id).populate({
-        path: 'followers',
-        select: 'username email full_name profile_image bio current_city',
-      });
+      const pipeline = [
+        {
+          $match: { _id: userId },
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'followers',
+            foreignField: '_id',
+            as: 'followers',
+          },
+        },
+        {
+          $project: {
+            username: 1,
+            email: 1,
+            full_name: 1,
+            profile_image: 1,
+            followers: {
+              _id: 1,
+              username: 1,
+              email: 1,
+              full_name: 1,
+              profile_image: 1,
+              bio: 1,
+              current_city: 1,
+              tick: 1,
+            },
+          },
+        },
+      ];
+
+      const [user] = await this.userService.findAggregate(pipeline);
 
       return {
         isError: false,
@@ -383,12 +462,42 @@ export class UserController {
   @ApiOperation({ summary: 'Get user followings' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async getFollowings(@Req() req: any) {
-    const { _id: user_id } = req.user;
+    const { _id } = req.user;
+    const userId = new ObjectId(_id as string);
     try {
-      const user = await this.userService.findOne(user_id).populate({
-        path: 'followings',
-        select: 'username email full_name profile_image bio current_city',
-      });
+      const pipeline = [
+        {
+          $match: { _id: userId },
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'followings',
+            foreignField: '_id',
+            as: 'followings',
+          },
+        },
+        {
+          $project: {
+            username: 1,
+            email: 1,
+            full_name: 1,
+            profile_image: 1,
+            followings: {
+              _id: 1,
+              username: 1,
+              email: 1,
+              full_name: 1,
+              profile_image: 1,
+              bio: 1,
+              current_city: 1,
+              tick: 1,
+            },
+          },
+        },
+      ];
+
+      const [user] = await this.userService.findAggregate(pipeline);
 
       return {
         isError: false,
