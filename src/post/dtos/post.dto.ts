@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsArray, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import MediaDto from './media-post.dto';
+import SharePostDto from './share-post.dto';
 
 class PostDto {
   @ApiProperty()
@@ -24,7 +25,7 @@ class PostDto {
 
   @ApiProperty()
   @IsArray()
-  shares: Array<string>;
+  shares: Array<SharePostDto>;
 
   @ApiProperty()
   @IsString()

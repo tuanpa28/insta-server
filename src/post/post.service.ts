@@ -37,10 +37,11 @@ export class PostService {
     return this.postModel.find(query);
   }
 
-  countDocuments(options?: FindOptionsDto) {
-    const query = {
-      ...(options && { [options.field]: options.payload }),
-    };
+  findAggregate(query: Array<any>) {
+    return this.postModel.aggregate(query);
+  }
+
+  countDocuments(query = {}) {
     return this.postModel.countDocuments(query).exec();
   }
 

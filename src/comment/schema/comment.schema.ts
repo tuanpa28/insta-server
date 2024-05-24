@@ -20,7 +20,6 @@ export class Comment {
   @Prop({
     type: [
       {
-        id: { type: String, required: true },
         user_id: {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'User',
@@ -32,7 +31,6 @@ export class Comment {
     default: [],
   })
   replies: Array<{
-    id: string;
     user_id: mongoose.Schema.Types.ObjectId;
     content: string;
   }>;

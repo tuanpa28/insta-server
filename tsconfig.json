@@ -19,6 +19,7 @@
     "noFallthroughCasesInSwitch": false,
     "paths": {
       "@/libs/*": ["src/libs/*"],
+      "@/utils": ["src/utils"],
       "@/auth/*": ["src/auth/*"],
       "@/comment/*": ["src/comment/*"],
       "@/notification/*": ["src/notification/*"],

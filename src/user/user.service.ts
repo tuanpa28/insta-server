@@ -39,10 +39,11 @@ export class UserService {
     return this.userModel.find(query).sort(sort).skip(skip).limit(limit);
   }
 
-  countDocuments(options?: FindOptionsDto) {
-    const query = {
-      ...(options && { [options.field]: options.payload }),
-    };
+  findAggregate(query: Array<any>) {
+    return this.userModel.aggregate(query).exec();
+  }
+
+  countDocuments(query = {}) {
     return this.userModel.countDocuments(query).exec();
   }
 

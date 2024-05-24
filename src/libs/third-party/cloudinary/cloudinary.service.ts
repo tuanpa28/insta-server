@@ -2,13 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { v2 as cloudinary, UploadApiOptions } from 'cloudinary';
 import * as streamifier from 'streamifier';
 
-import { optimizeCloudinaryUrl } from '@/libs/common/utils';
 import { CloudinaryResponse } from './cloudinary-response';
 import {
   CLOUDINARY_ALLOW_IMAGE_FORMATS,
   CLOUDINARY_ROOT_FOLDER_NAME,
 } from './cloudinary.constant';
 import { buildPublicId } from './cloudinary.util';
+import { optimizeCloudinaryUrl } from '@/utils';
 
 @Injectable()
 export class CloudinaryService {
