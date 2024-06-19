@@ -48,7 +48,7 @@ export class UploadController {
   }
 
   @Post('video')
-  @ApiOperation({ summary: 'Upload Video' })
+  @ApiOperation({ summary: 'Upload Video (file smaller than 4.5MB)' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   @UseInterceptors(FileInterceptor('video'))
   async uploadVideo(@UploadedFile() file: Express.Multer.File) {

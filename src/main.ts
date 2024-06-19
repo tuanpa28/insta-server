@@ -25,7 +25,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   app.enableCors({
-    origin: '*',
+    origin: ['http://localhost:3000', 'https://social--insta.vercel.app'],
     credentials: true,
   });
   app.use(helmet());
