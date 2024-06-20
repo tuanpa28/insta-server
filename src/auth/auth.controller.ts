@@ -163,21 +163,20 @@ export class AuthController {
         path: '/',
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'none',
         maxAge: 24 * 60 * 60 * 1000, // 24 giờ
       });
 
-      res.send(`
-        <script>
-          window.opener.postMessage({ type: "success", accessToken: "${accessToken}" }, "*");
-          window.close();
-        </script>
-      `);
+      // res.send(`
+      //   <script>
+      //     window.opener.postMessage({ type: "success", accessToken: "${accessToken}" }, "*");
+      //     window.close();
+      //   </script>
+      // `);
 
-      const redirectUrl = new URL(process.env.URL_CLIENT);
+      const redirectUrl = new URL(`${process.env.URL_CLIENT}/sign-in`);
       redirectUrl.searchParams.append('accessToken', accessToken);
-
-      return res.redirect(redirectUrl.toString());
+      res.redirect(redirectUrl.toString());
     } catch (error) {
       throw new HttpException(
         {

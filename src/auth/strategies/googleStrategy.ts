@@ -7,6 +7,7 @@ import * as randomstring from 'randomstring';
 import { CreateUserDto } from '@/user/dtos';
 import { User } from '@/user/schema/user.schema';
 import { UserService } from '@/user/user.service';
+import { getLastName } from '@/utils';
 import 'dotenv/config';
 
 @Injectable()
@@ -37,18 +38,27 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   }
 
   private async profileToUser(profile: Profile): Promise<User> {
+    const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
     const password = randomstring.generate({
       length: 6,
       charset: 'numeric',
     });
 
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    const randomString = randomstring.generate({
+      length: 4,
+      charset: characters,
+    });
+
+    const username = `${getLastName(profile?.name?.givenName)}_${randomString}`;
+
     return {
-      googleId: profile.id,
-      username: profile.name.givenName,
-      full_name: profile.displayName,
-      email: profile.emails[0].value,
-      profile_image: profile.photos[0].value,
+      googleId: profile?.id,
+      username,
+      full_name: profile?.displayName,
+      email: profile?.emails[0]?.value,
+      profile_image: profile?.photos[0]?.value,
       password: hashedPassword,
     } as User;
   }
