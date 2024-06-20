@@ -131,22 +131,28 @@ export class AuthService {
         secret: process.env.SECRET_KEY_JWT,
       });
 
+      const currentUser = await this.userService.findOne(user._id);
+
+      if (!currentUser) {
+        throw new UnauthorizedException('Tài khoản không tồn tại!');
+      }
+
       const payload = {
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-        password: user.password,
-        full_name: user.full_name,
-        profile_image: user.profile_image,
-        bio: user.bio,
-        date_of_birth: user.date_of_birth,
-        gender: user.gender,
-        current_city: user.current_city,
-        from: user.from,
-        followers: user.followers,
-        followings: user.followings,
-        tick: user.tick,
-        isAdmin: user.isAdmin,
+        _id: currentUser._id,
+        username: currentUser.username,
+        email: currentUser.email,
+        password: currentUser.password,
+        full_name: currentUser.full_name,
+        profile_image: currentUser.profile_image,
+        bio: currentUser.bio,
+        date_of_birth: currentUser.date_of_birth,
+        gender: currentUser.gender,
+        current_city: currentUser.current_city,
+        from: currentUser.from,
+        followers: currentUser.followers,
+        followings: currentUser.followings,
+        tick: currentUser.tick,
+        isAdmin: currentUser.isAdmin,
       };
 
       const accessToken = await this.jwtService.signAsync(payload, {

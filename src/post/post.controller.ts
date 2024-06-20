@@ -293,7 +293,7 @@ export class PostController {
     try {
       const { _id: user_id, followings } = req.user;
       const userId = new ObjectId(user_id as string);
-      const followingsObjectId = followings.map(
+      const followingsObjectId = followings?.map(
         (following: string) => new ObjectId(following),
       );
       const {
@@ -312,7 +312,10 @@ export class PostController {
       };
 
       const matchCondition = {
-        $or: [{ user_id: userId }, { user_id: { $in: followingsObjectId } }],
+        $or: [
+          { user_id: userId },
+          { user_id: { $in: followingsObjectId || [] } },
+        ],
         ...params,
       };
 
