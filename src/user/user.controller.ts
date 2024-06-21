@@ -279,6 +279,54 @@ export class UserController {
           $limit: Number(limit),
         },
         {
+          $lookup: {
+            from: 'posts',
+            localField: '_id',
+            foreignField: 'user_id',
+            as: 'posts',
+          },
+        },
+        {
+          $addFields: {
+            totalPosts: { $size: '$posts' },
+            recentImages: {
+              $slice: [
+                {
+                  $reduce: {
+                    input: {
+                      $filter: {
+                        input: '$posts',
+                        as: 'post',
+                        cond: { $gt: [{ $size: '$$post.media' }, 0] },
+                      },
+                    },
+                    initialValue: [],
+                    in: {
+                      $concatArrays: [
+                        '$$value',
+                        {
+                          $map: {
+                            input: {
+                              $filter: {
+                                input: '$$this.media',
+                                as: 'media',
+                                cond: { $eq: ['$$media.type', 'image'] },
+                              },
+                            },
+                            as: 'media',
+                            in: '$$media.url',
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+                -3,
+              ],
+            },
+          },
+        },
+        {
           $project: {
             _id: 1,
             username: 1,
@@ -287,9 +335,13 @@ export class UserController {
             profile_image: 1,
             bio: 1,
             current_city: 1,
+            from: 1,
+            followers: 1,
+            followings: 1,
             tick: 1,
             createdAt: 1,
-            updatedAt: 1,
+            totalPosts: 1,
+            recentImages: 1,
           },
         },
       ];
