@@ -368,6 +368,8 @@ export class UserController {
             email: 1,
             full_name: 1,
             profile_image: 1,
+            followers: 1,
+            followings: 1,
             tick: 1,
           },
         },
