@@ -338,6 +338,54 @@ export class PostController {
           $unwind: { path: '$user', preserveNullAndEmptyArrays: true },
         },
         {
+          $lookup: {
+            from: 'posts',
+            localField: 'user._id',
+            foreignField: 'user_id',
+            as: 'userPosts',
+          },
+        },
+        {
+          $addFields: {
+            'user.totalPosts': { $size: '$userPosts' },
+            'user.recentImages': {
+              $slice: [
+                {
+                  $reduce: {
+                    input: {
+                      $filter: {
+                        input: '$userPosts',
+                        as: 'post',
+                        cond: { $gt: [{ $size: '$$post.media' }, 0] },
+                      },
+                    },
+                    initialValue: [],
+                    in: {
+                      $concatArrays: [
+                        '$$value',
+                        {
+                          $map: {
+                            input: {
+                              $filter: {
+                                input: '$$this.media',
+                                as: 'media',
+                                cond: { $eq: ['$$media.type', 'image'] },
+                              },
+                            },
+                            as: 'media',
+                            in: '$$media.url',
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+                3,
+              ],
+            },
+          },
+        },
+        {
           $project: {
             caption: 1,
             media: 1,
@@ -357,6 +405,8 @@ export class PostController {
             'user.followings': 1,
             'user.tick': 1,
             'user.createdAt': 1,
+            'user.totalPosts': 1,
+            'user.recentImages': 1,
           },
         },
       ];
