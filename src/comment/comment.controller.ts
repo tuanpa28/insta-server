@@ -108,13 +108,106 @@ export class CommentController {
     const { _id: user_id } = req.user;
     const data = { ...createEmployeeDto, user_id };
     try {
-      const comment = await this.commentService.create(data);
+      const comment = (await this.commentService.create(data)) as any;
+
+      const pipeline = [
+        {
+          $match: { _id: comment._id },
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'user_id',
+            foreignField: '_id',
+            as: 'user',
+          },
+        },
+        {
+          $unwind: { path: '$user', preserveNullAndEmptyArrays: true },
+        },
+        {
+          $lookup: {
+            from: 'posts',
+            localField: 'user._id',
+            foreignField: 'user_id',
+            as: 'userPosts',
+          },
+        },
+        {
+          $addFields: {
+            'user.totalPosts': { $size: '$userPosts' },
+            'user.recentImages': {
+              $slice: [
+                {
+                  $reduce: {
+                    input: {
+                      $filter: {
+                        input: '$userPosts',
+                        as: 'post',
+                        cond: { $gt: [{ $size: '$$post.media' }, 0] },
+                      },
+                    },
+                    initialValue: [],
+                    in: {
+                      $concatArrays: [
+                        '$$value',
+                        {
+                          $map: {
+                            input: {
+                              $filter: {
+                                input: '$$this.media',
+                                as: 'media',
+                                cond: { $eq: ['$$media.type', 'image'] },
+                              },
+                            },
+                            as: 'media',
+                            in: '$$media.url',
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+                3,
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            user_id: 1,
+            post_id: 1,
+            content: 1,
+            likes: 1,
+            replies: 1,
+            createdAt: 1,
+            'user._id': 1,
+            'user.username': 1,
+            'user.email': 1,
+            'user.full_name': 1,
+            'user.profile_image': 1,
+            'user.bio': 1,
+            'user.current_city': 1,
+            'user.from': 1,
+            'user.followers': 1,
+            'user.followings': 1,
+            'user.tick': 1,
+            'user.createdAt': 1,
+            'user.totalPosts': 1,
+            'user.recentImages': 1,
+          },
+        },
+      ];
+
+      const commentsWithUser =
+        await this.commentService.findAggregate(pipeline);
 
       return {
         isError: false,
         statusCode: HttpStatus.OK,
         message: 'Successful',
-        data: comment,
+        data: commentsWithUser[0],
       };
     } catch (error) {
       throw new HttpException(

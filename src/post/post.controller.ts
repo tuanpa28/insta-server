@@ -346,6 +346,14 @@ export class PostController {
           },
         },
         {
+          $lookup: {
+            from: 'comments',
+            localField: '_id',
+            foreignField: 'post_id',
+            as: 'comments',
+          },
+        },
+        {
           $addFields: {
             'user.totalPosts': { $size: '$userPosts' },
             'user.recentImages': {
@@ -383,6 +391,7 @@ export class PostController {
                 3,
               ],
             },
+            totalComments: { $size: '$comments' },
           },
         },
         {
@@ -407,6 +416,7 @@ export class PostController {
             'user.createdAt': 1,
             'user.totalPosts': 1,
             'user.recentImages': 1,
+            totalComments: 1,
           },
         },
       ];
