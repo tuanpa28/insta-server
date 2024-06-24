@@ -107,16 +107,53 @@ export class UserController {
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
   async findOneByUserName(@Param('username') username: string) {
     try {
-      const user = await this.userService.findOneOptions({
-        field: 'username',
-        payload: username,
-      });
+      const pipeline = [
+        {
+          $match: {
+            username,
+          },
+        },
+        {
+          $lookup: {
+            from: 'posts',
+            localField: '_id',
+            foreignField: 'user_id',
+            as: 'posts',
+          },
+        },
+        {
+          $addFields: {
+            totalPosts: { $size: '$posts' },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            username: 1,
+            email: 1,
+            full_name: 1,
+            profile_image: 1,
+            bio: 1,
+            date_of_birth: 1,
+            gender: 1,
+            current_city: 1,
+            from: 1,
+            followers: 1,
+            followings: 1,
+            tick: 1,
+            createdAt: 1,
+            totalPosts: 1,
+          },
+        },
+      ];
+
+      const user = await this.userService.findAggregate(pipeline);
 
       return {
         isError: false,
         statusCode: HttpStatus.OK,
         message: 'Successful',
-        data: user,
+        data: user[0],
       };
     } catch (error) {
       throw new HttpException(
