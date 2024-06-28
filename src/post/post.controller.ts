@@ -450,13 +450,34 @@ export class PostController {
   @Get(':id/user')
   @ApiOperation({ summary: 'Get All Post For One User' })
   @ApiBearerAuth(ACCESS_TOKEN_NAME)
-  async findAllPostForOneUser(@Param('id') user_id: string) {
+  async findAllPostForOneUser(
+    @Param('id') user_id: string,
+    @Query() query: any,
+  ) {
     const userId = new ObjectId(user_id);
+
+    const {
+      page = 1,
+      limit = 12,
+      _sort = 'createdAt',
+      _order = 'asc',
+      ...params
+    } = query;
+
+    const { skip, sort } = {
+      skip: (Number(page) - 1) * Number(limit),
+      sort: {
+        [_sort]: _order === 'desc' ? -1 : 1,
+      },
+    };
     try {
-      const posts = await this.postService.findAggregate([
+      const pipeline = [
         {
-          $match: { user_id: userId },
+          $match: { user_id: userId, ...params },
         },
+        { $sort: sort },
+        { $skip: skip },
+        { $limit: Number(limit) },
         {
           $lookup: {
             from: 'users',
@@ -469,18 +490,92 @@ export class PostController {
           $unwind: { path: '$user', preserveNullAndEmptyArrays: true },
         },
         {
+          $lookup: {
+            from: 'posts',
+            localField: 'user._id',
+            foreignField: 'user_id',
+            as: 'userPosts',
+          },
+        },
+        {
+          $lookup: {
+            from: 'comments',
+            localField: '_id',
+            foreignField: 'post_id',
+            as: 'comments',
+          },
+        },
+        {
+          $addFields: {
+            'user.totalPosts': { $size: '$userPosts' },
+            'user.recentImages': {
+              $slice: [
+                {
+                  $reduce: {
+                    input: {
+                      $filter: {
+                        input: '$userPosts',
+                        as: 'post',
+                        cond: { $gt: [{ $size: '$$post.media' }, 0] },
+                      },
+                    },
+                    initialValue: [],
+                    in: {
+                      $concatArrays: [
+                        '$$value',
+                        {
+                          $map: {
+                            input: {
+                              $filter: {
+                                input: '$$this.media',
+                                as: 'media',
+                                cond: { $eq: ['$$media.type', 'image'] },
+                              },
+                            },
+                            as: 'media',
+                            in: '$$media.url',
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+                3,
+              ],
+            },
+            totalComments: { $size: '$comments' },
+          },
+        },
+        {
           $project: {
             caption: 1,
             media: 1,
             likes: 1,
             shares: 1,
             slug: 1,
+            createdAt: 1,
             'user._id': 1,
             'user.username': 1,
             'user.email': 1,
             'user.full_name': 1,
+            'user.profile_image': 1,
+            'user.bio': 1,
+            'user.current_city': 1,
+            'user.from': 1,
+            'user.followers': 1,
+            'user.followings': 1,
+            'user.tick': 1,
+            'user.createdAt': 1,
+            'user.totalPosts': 1,
+            'user.recentImages': 1,
+            totalComments: 1,
           },
         },
+      ];
+
+      const [posts, count] = await Promise.all([
+        this.postService.findAggregate(pipeline),
+        this.postService.countDocuments({ user_id: userId, ...params }),
       ]);
 
       return {
@@ -488,6 +583,9 @@ export class PostController {
         statusCode: HttpStatus.OK,
         message: 'Successful',
         data: posts,
+        currentPage: Number(page),
+        totalPage: Math.ceil(count / Number(limit)),
+        totalDocs: count,
       };
     } catch (error) {
       throw new HttpException(
